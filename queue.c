@@ -55,13 +55,10 @@ bool q_insert_head(struct list_head *head, char *s)
         return false;
     }
 
-    size_t len = strlen(s);
-    char *value = malloc(len + 1);
+    char *value = strdup(s);
     if (value == NULL) {
         return NULL;
     }
-    strncpy(value, s, len);
-    value[len] = '\0';
 
     element_t *node = malloc(sizeof(element_t));
     if (node == NULL) {
@@ -87,13 +84,10 @@ bool q_insert_tail(struct list_head *head, char *s)
         return false;
     }
 
-    size_t len = strlen(s);
-    char *value = malloc(len + 1);
+    char *value = strdup(s);
     if (value == NULL) {
         return NULL;
     }
-    strncpy(value, s, len);
-    value[len] = '\0';
 
     element_t *node = malloc(sizeof(element_t));
     if (node == NULL) {
