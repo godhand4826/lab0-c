@@ -4,11 +4,6 @@
 #include <string.h>
 #include "list.h"
 
-typedef struct {
-    struct list_head list;
-    int size;
-} queue_t;
-
 /* Notice: sometimes, Cppcheck would find the potential NULL pointer bugs,
  * but some of them cannot occur. You can suppress them by adding the
  * following line.
@@ -18,15 +13,14 @@ typedef struct {
 /* Create an empty queue */
 struct list_head *q_new()
 {
-    queue_t *q = malloc(sizeof(queue_t));
+    struct list_head *q = malloc(sizeof(struct list_head));
     if (q == NULL) {
         return NULL;
     }
 
-    INIT_LIST_HEAD(&q->list);
-    q->size = 0;
+    INIT_LIST_HEAD(q);
 
-    return &q->list;
+    return q;
 }
 
 /* Free all storage used by queue */
@@ -36,19 +30,16 @@ void q_free(struct list_head *head)
         return;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-
     element_t *node, *safe;
     list_for_each_entry_safe (node, safe, head, list) {
-        list_del(&node->list);
+        list_del_init(&node->list);
         q_release_element(node);
     }
 
-    free(q);
+    free(head);
 }
 
 /* Insert an element at head of queue */
-// cppcheck-suppress constParameterPointer
 bool q_insert_head(struct list_head *head, char *s)
 {
     if (head == NULL) {
@@ -68,16 +59,12 @@ bool q_insert_head(struct list_head *head, char *s)
     INIT_LIST_HEAD(&node->list);
     node->value = value;
 
-    queue_t *q = list_entry(head, queue_t, list);
-    list_add(&node->list, &q->list);
-    q->size += 1;
+    list_add(&node->list, head);
 
-    // cppcheck-suppress memleak
     return true;
 }
 
 /* Insert an element at tail of queue */
-// cppcheck-suppress constParameterPointer
 bool q_insert_tail(struct list_head *head, char *s)
 {
     if (head == NULL) {
@@ -97,30 +84,20 @@ bool q_insert_tail(struct list_head *head, char *s)
     INIT_LIST_HEAD(&node->list);
     node->value = value;
 
-    queue_t *q = list_entry(head, queue_t, list);
-    list_add_tail(&node->list, &q->list);
-    q->size += 1;
+    list_add_tail(&node->list, head);
 
-    // cppcheck-suppress memleak
     return true;
 }
 
 /* Remove an element from head of queue */
 element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
 {
-    if (head == NULL) {
-        return NULL;
-    }
-
-    queue_t *q = list_entry(head, queue_t, list);
-
-    if (q->size == 0) {
+    if (head == NULL || list_empty(head)) {
         return NULL;
     }
 
     element_t *node = list_first_entry(head, element_t, list);
-    list_del_init(&node->list);
-    q->size -= 1;
+    list_del_init(head->next);
 
     if (sp != NULL) {
         strncpy(sp, node->value, bufsize - 1);
@@ -133,18 +110,12 @@ element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
 /* Remove an element from tail of queue */
 element_t *q_remove_tail(struct list_head *head, char *sp, size_t bufsize)
 {
-    if (head == NULL) {
-        return NULL;
-    }
-    queue_t *q = list_entry(head, queue_t, list);
-
-    if (q->size == 0) {
+    if (head == NULL || list_empty(head)) {
         return NULL;
     }
 
     element_t *node = list_last_entry(head, element_t, list);
-    list_del_init(&node->list);
-    q->size -= 1;
+    list_del_init(head->prev);
 
     if (sp != NULL) {
         strncpy(sp, node->value, bufsize - 1);
@@ -161,26 +132,25 @@ int q_size(struct list_head *head)
         return 0;
     }
 
-    queue_t const *q = list_entry(head, queue_t, list);
+    size_t size = 0;
+    struct list_head *node;
+    list_for_each (node, head) {
+        size += 1;
+    }
 
-    return q->size;
+    return size;
 }
 
 /* Delete the middle node in queue */
 bool q_delete_mid(struct list_head *head)
 {
     // https://leetcode.com/problems/delete-the-middle-node-of-a-linked-list/
-    if (head == NULL) {
+    if (head == NULL || list_empty(head)) {
         return false;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-    if (q->size == 0) {
-        return false;
-    }
-
-    int mid = q->size / 2;
-    struct list_head *cur = q->list.next;
+    int mid = q_size(head) / 2;
+    struct list_head *cur = head->next;
     for (int i = 0; i < mid; i++) {
         cur = cur->next;
     }
@@ -188,7 +158,6 @@ bool q_delete_mid(struct list_head *head)
     element_t *node = list_entry(cur, element_t, list);
     list_del_init(&node->list);
     q_release_element(node);
-    q->size -= 1;
 
     return true;
 }
@@ -201,10 +170,8 @@ bool q_delete_dup(struct list_head *head)
         return false;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-
-    const struct list_head *end = &q->list;
-    struct list_head *cur = &q->list;
+    const struct list_head *end = head;
+    struct list_head *cur = head;
 
     while (cur->next != end && cur->next->next != end) {
         struct list_head *check = cur->next;
@@ -214,13 +181,11 @@ bool q_delete_dup(struct list_head *head)
             while (check->next != end && strcmp(c->value, cc->value) == 0) {
                 list_del_init(&cc->list);
                 q_release_element(cc);
-                q->size -= 1;
 
                 cc = list_entry(c->list.next, element_t, list);
             }
             list_del_init(check);
             q_release_element(list_entry(check, element_t, list));
-            q->size -= 1;
         } else {
             cur = cur->next;
         }
@@ -237,10 +202,8 @@ void q_swap(struct list_head *head)
         return;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-
-    const struct list_head *end = &q->list;
-    struct list_head *cur = &q->list;
+    const struct list_head *end = head;
+    struct list_head *cur = head;
     while (cur->next != end && cur->next->next != end) {
         element_t *a = list_entry(cur->next, element_t, list);
         element_t *b = list_entry(cur->next->next, element_t, list);
@@ -280,9 +243,7 @@ void q_reverse(struct list_head *head)
         return;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-
-    list_reverse(&q->list);
+    list_reverse(head);
 }
 
 /* Reverse the nodes of the list k at a time */
@@ -293,17 +254,14 @@ void q_reverseK(struct list_head *head, int k)
         return;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-
     struct list_head result;
     INIT_LIST_HEAD(&result);
 
-    for (int j = q->size; j >= k; j -= k) {
-        const struct list_head *end = &q->list;
-        struct list_head *cur = q->list.next;
+    for (int j = q_size(head); j >= k; j -= k) {
+        const struct list_head *end = head;
+        struct list_head *cur = head->next;
 
-        int i = 0;
-        for (i = 0; i < k - 1; i++) {
+        for (int i = 0; i < k - 1; i++) {
             if (cur != end) {
                 cur = cur->next;
             } else {
@@ -313,7 +271,7 @@ void q_reverseK(struct list_head *head, int k)
 
         struct list_head tmp;
         INIT_LIST_HEAD(&tmp);
-        list_cut_position(&tmp, &q->list, cur);
+        list_cut_position(&tmp, head, cur);
 
 
         if (cur != end) {
@@ -323,7 +281,7 @@ void q_reverseK(struct list_head *head, int k)
         list_splice_tail_init(&tmp, &result);
     }
 
-    list_splice_init(&result, &q->list);
+    list_splice_init(&result, head);
 }
 
 /**
@@ -385,12 +343,7 @@ void q_sort(struct list_head *head, bool descend)
         return;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-    if (q->size <= 1) {
-        return;
-    }
-
-    list_mergesort(&q->list, q->size, descend);
+    list_mergesort(head, q_size(head), descend);
 }
 
 
@@ -403,14 +356,12 @@ int q_ascend(struct list_head *head)
         return 0;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-
-    if (q->size <= 1) {
-        return q->size;
+    if (q_size(head) <= 1) {
+        return q_size(head);
     }
 
-    const struct list_head *end = &q->list;
-    struct list_head *cur = q->list.next->next;
+    const struct list_head *end = head;
+    struct list_head *cur = head->next->next;
     while (cur != end) {
         if (cur->prev == head) {
             cur = cur->next;
@@ -423,13 +374,12 @@ int q_ascend(struct list_head *head)
         if (strcmp(a->value, b->value) < 0) {
             list_del_init(&b->list);
             q_release_element(b);
-            q->size -= 1;
         } else {
             cur = cur->next;
         }
     }
 
-    return q->size;
+    return q_size(head);
 }
 
 /* Remove every node which has a node with a strictly greater value anywhere to
@@ -441,14 +391,12 @@ int q_descend(struct list_head *head)
         return 0;
     }
 
-    queue_t *q = list_entry(head, queue_t, list);
-
-    if (q->size <= 1) {
-        return q->size;
+    if (q_size(head) <= 1) {
+        return q_size(head);
     }
 
-    const struct list_head *end = &q->list;
-    struct list_head *cur = q->list.next->next;
+    const struct list_head *end = head;
+    struct list_head *cur = head->next->next;
     while (cur != end) {
         if (cur->prev == head) {
             cur = cur->next;
@@ -461,13 +409,12 @@ int q_descend(struct list_head *head)
         if (strcmp(a->value, b->value) > 0) {
             list_del_init(&b->list);
             q_release_element(b);
-            q->size -= 1;
         } else {
             cur = cur->next;
         }
     }
 
-    return q->size;
+    return q_size(head);
 }
 
 /* Merge all the queues into one sorted queue, which is in ascending/descending
@@ -493,12 +440,8 @@ int q_merge(struct list_head *head, bool descend)
             continue;
         }
 
-        queue_t *q1 = list_entry(first->q, queue_t, list);
-        queue_t *q2 = list_entry(cur->q, queue_t, list);
-        list_merge(&q1->list, &q2->list, descend);
-        q1->size += q2->size;
-        q2->size = 0;
+        list_merge(first->q, cur->q, descend);
     }
 
-    return list_entry(first->q, queue_t, list)->size;
+    return q_size(first->q);
 }
