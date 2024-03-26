@@ -273,7 +273,6 @@ void q_reverseK(struct list_head *head, int k)
         INIT_LIST_HEAD(&tmp);
         list_cut_position(&tmp, head, cur);
 
-
         if (cur != end) {
             list_reverse(&tmp);
         }
